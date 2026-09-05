@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+.pytest_cache/
+dist/
+build/
+episode.local.json
+media/
+renders/
+qa-output/
