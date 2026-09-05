@@ -180,6 +180,17 @@ class ValidatorTests(unittest.TestCase):
             errors = MODULE.validate(manifest, path, "deliver")
             self.assertTrue(any("wrong ratio" in error for error in errors))
 
+    def test_long_episode_scales_visual_qa_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, manifest = self.make_project(Path(tmp))
+            manifest["project"]["target_duration_seconds"] = 600
+            errors = MODULE.validate(manifest, path, "final")
+            self.assertTrue(any("at least 60 original-size frames" in error for error in errors))
+            self.assertTrue(any("at least 20 dense crops" in error for error in errors))
+            manifest["gates"]["final"]["original_size_frame_count"] = 60
+            manifest["gates"]["final"]["dense_crop_count"] = 20
+            self.assertEqual(MODULE.validate(manifest, path, "final"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

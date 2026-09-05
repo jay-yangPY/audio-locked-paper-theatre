@@ -1,6 +1,6 @@
 # Narration-locked paper-theatre episode workflow
 
-Use this route for 60–240 second editorial paper-collage explainers when the user approves the script, creates or supplies the final voiceover, and expects a complete locally assembled episode rather than three short generated clips.
+Use this route for editorial paper-collage explainers of 60 seconds or longer when the user approves the script, creates or supplies the final voiceover, and expects a complete locally assembled episode rather than three short generated clips. There is no hard upper duration limit; longer episodes scale through internal chapters and proportionally larger QA samples.
 
 ## Root contract
 
@@ -143,11 +143,11 @@ If the first-40 sample fails because the route itself is wrong—for example fla
 
 ## Gate 8 — chapter build and final release
 
-- Build the remainder internally in natural 45–60 second chapters. Do not interrupt the user every 20 seconds unless a new risky mechanism or materially different layout needs approval.
+- After the user approves the proof mechanism, complete the entire requested episode. Build the remainder internally in natural 45–60 second chapters, but do not turn those construction units into repeated approval gates unless a new risky mechanism or materially different layout appears.
 - Preserve accepted intervals. Rerender only a failed interval unless a global defect is proven.
 - Re-run whole-film geometry and semantic checks from zero. Do not inherit the first-40 verdict.
 - Re-run canvas-edge, all-object collision, z-order, semantic-mark, and container geometry/optical-centre checks from zero. Inspect every semantic mark, not only a sample.
-- For a roughly three-minute film, inspect at least 24 original-size frames and at least 8 enlarged dense-region crops; scale proportionally for other durations and cover every state change.
+- Inspect at least `max(24, ceil(duration_seconds / 10))` original-size frames and `max(8, ceil(duration_seconds / 30))` enlarged dense-region crops. These are floors, not substitutes for covering every state change, semantic mark, and high-risk overlap.
 - Decode the entire output and inspect black frames, frozen intervals, audio peaks, joins, and final-frame holds.
 - Only an independent `OWNER_PREVIEW_ALLOWED` verdict permits candidate delivery. Keep this separate from publication and market validation.
 

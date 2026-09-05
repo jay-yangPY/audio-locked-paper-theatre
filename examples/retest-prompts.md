@@ -72,3 +72,15 @@ Expected:
 
 - requires independently generated 3:4 and 4:3 compositions
 - checks exact text, geometry centre, final-pixel optical centre, platform UI overlap, and mobile readability
+
+## Retest 7 — no 240-second ceiling
+
+```text
+这集真实口播有八分钟。前40秒通过后，把整集做完，不要每45秒再来问我一次；但长片不能因为时长增加就减少审核。
+```
+
+Expected:
+
+- accepts a duration longer than 240 seconds instead of forcing truncation or splitting the public workflow
+- uses 45–60 second chapters only as internal construction units after the proof is approved
+- scales independent assets, original-size review frames, and dense-crop checks with the complete narration duration

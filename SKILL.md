@@ -1,6 +1,6 @@
 ---
 name: audio-locked-paper-theatre
-description: Plan, validate, and deliver 60–240 second narration-locked editorial paper-collage explainers. Use when the final voice track must control a fixed paper-theatre timeline with many independent AI assets, deterministic captions and semantic marks, a first-40-second proof gate, whole-film QA, native 3:4/4:3 covers, and a release package. Do not use for a single short B-roll clip or a presenter-led advertisement.
+description: Plan, validate, and deliver narration-locked editorial paper-collage explainers of 60 seconds or longer, with no hard upper duration limit. Use when the final voice track must control a fixed paper-theatre timeline with many independent AI assets, deterministic captions and semantic marks, a first-40-second proof gate, duration-scaled whole-film QA, native 3:4/4:3 covers, and a release package. Do not use for a single short B-roll clip or a presenter-led advertisement.
 ---
 
 # Audio-Locked Paper Theatre
@@ -23,6 +23,7 @@ Read [references/workflow.md](references/workflow.md) completely before planning
 - Treat a mascot or digital person as a role-based actor. It appears only to answer, react, point, demonstrate, or cause an event.
 - Register every visible text, numeral, icon, badge, button, and card child with `center_in_parent`. Geometry centre and final-pixel optical centre must both pass.
 - The first 40 seconds prove the mechanism; they do not approve the complete film. A global route defect rejects the whole sample and returns to the last approved keyframe or production contract.
+- There is no 240-second ceiling. After proof approval, finish the complete requested episode; use 45–60 second chapters only as internal construction units, not as repeated user approval gates. Scale asset counts, original-size review frames, and dense crops with total duration.
 - Generate 3:4 and 4:3 covers as independent AI-native compositions. Verify exact text, optical centring, phone-size readability, platform UI overlap, anatomy, and focal-point occlusion.
 - Keep `OWNER_PREVIEW_ALLOWED`, `PUBLISHED`, and `MARKET_VALIDATED` as separate states.
 
@@ -37,7 +38,7 @@ draft
 → separate real-audio screen captions
 → sentence-to-visual map, asset ledger, layer contract
 → first-40-second proof
-→ complete in 45–60 second internal chapters
+→ after proof approval, complete the full episode in internal 45–60 second construction chapters
 → fresh whole-film gates
 → optional user-owned 3.5–4.5 second brand tail
 → independent native 3:4 and 4:3 covers

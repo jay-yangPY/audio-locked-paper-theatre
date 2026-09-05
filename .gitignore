@@ -6,6 +6,5 @@ Thumbs.db
 dist/
 build/
 episode.local.json
-media/
 renders/
 qa-output/

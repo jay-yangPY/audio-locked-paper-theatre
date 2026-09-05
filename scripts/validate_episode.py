@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import struct
 import sys
@@ -143,6 +144,9 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
         ratio, resolution = expected[project["orientation"]]
         require(errors, project.get("aspect_ratio") == ratio, f"aspect_ratio must be {ratio}")
         require(errors, project.get("resolution") == resolution, f"resolution must be {resolution}")
+    duration = project.get("target_duration_seconds")
+    if duration is not None:
+        require(errors, isinstance(duration, (int, float)) and duration > 0, "target duration must be positive when provided")
 
     visual = data.get("visual", {})
     require(errors, visual.get("production_profile") == "audio-locked-paper-theatre-longform", "wrong production_profile")
@@ -257,8 +261,21 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
             require(errors, final.get("canvas_edge_status") == "PASS", "final canvas-edge gate must PASS")
             require(errors, final.get("container_geometry_center_status") == "PASS", "container geometry-centre gate must PASS")
             require(errors, final.get("container_optical_center_status") == "PASS", "container optical-centre gate must PASS")
-        require(errors, isinstance(final.get("original_size_frame_count"), int) and final["original_size_frame_count"] >= 24, "at least 24 original-size frames are required")
-        require(errors, isinstance(final.get("dense_crop_count"), int) and final["dense_crop_count"] >= 8, "at least 8 dense crops are required")
+        duration_for_qa = duration if isinstance(duration, (int, float)) and duration > 0 else 0
+        required_frames = max(24, math.ceil(duration_for_qa / 10))
+        required_crops = max(8, math.ceil(duration_for_qa / 30))
+        require(
+            errors,
+            isinstance(final.get("original_size_frame_count"), int)
+            and final["original_size_frame_count"] >= required_frames,
+            f"at least {required_frames} original-size frames are required for this duration",
+        )
+        require(
+            errors,
+            isinstance(final.get("dense_crop_count"), int)
+            and final["dense_crop_count"] >= required_crops,
+            f"at least {required_crops} dense crops are required for this duration",
+        )
         require(errors, final.get("full_decode_status") == "PASS", "full decode must PASS")
         require(errors, final.get("steward_status") == "OWNER_PREVIEW_ALLOWED", "fresh final steward approval is required")
         delivery = data.get("delivery", {})
