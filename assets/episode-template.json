@@ -1,5 +1,5 @@
 {
-  "schema_version": "audio-locked-episode-1.1",
+  "schema_version": "audio-locked-episode-1.2",
   "project": {
     "title": "",
     "orientation": "horizontal",
@@ -46,6 +46,11 @@
     "background_motion": "locked",
     "sentence_visual_map_path": "",
     "asset_manifest_path": "",
+    "semantic_action_manifest_path": "",
+    "object_registry_path": "",
+    "occlusion_allowlist_path": "",
+    "silent_review_path": "",
+    "motion_recipe_ledger_path": "",
     "target_distinct_assets_per_minute": [12, 18],
     "max_simultaneous_subject_groups": 2,
     "captions_and_marks_are_deterministic_post": true,
@@ -74,6 +79,9 @@
       "canvas_edge_status": "pending",
       "container_center_status": "pending",
       "route_regression_status": "pending",
+      "semantic_action_status": "pending",
+      "physical_boundary_status": "pending",
+      "silent_readability_status": "pending",
       "steward_status": "pending"
     },
     "final": {
@@ -86,6 +94,11 @@
       "canvas_edge_status": "pending",
       "container_geometry_center_status": "pending",
       "container_optical_center_status": "pending",
+      "semantic_action_status": "pending",
+      "physical_boundary_status": "pending",
+      "silent_readability_status": "pending",
+      "output_origin_status": "pending",
+      "same_source_layer_status": "pending",
       "original_size_frame_count": null,
       "dense_crop_count": null,
       "full_decode_status": "pending",

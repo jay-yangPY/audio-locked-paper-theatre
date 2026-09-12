@@ -1,0 +1,137 @@
+{
+  "schema_version": "object-registry-1.0",
+  "objects": [
+    {
+      "object_id": "book_stage",
+      "parent_id": null,
+      "source_id": "stage-source",
+      "semantic_roles": ["stage"],
+      "z_level": 0,
+      "visible_bounds_source": [0, 0, 1920, 1080],
+      "allowed_occlusions": [],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "hero_image",
+      "parent_id": "book_stage",
+      "source_id": "hero-source",
+      "semantic_roles": ["primary_subject"],
+      "z_level": 20,
+      "visible_bounds_source": [400, 240, 500, 300],
+      "allowed_occlusions": ["scanner_slot_mask"],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "scanner_shell",
+      "parent_id": "book_stage",
+      "source_id": "scanner-source",
+      "semantic_roles": ["machine"],
+      "z_level": 30,
+      "visible_bounds_source": [250, 180, 1000, 520],
+      "allowed_occlusions": ["hero_image"],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "scanner_slot_mask",
+      "parent_id": "scanner_shell",
+      "source_id": "scanner-source",
+      "semantic_roles": ["hard_mask"],
+      "z_level": 31,
+      "visible_bounds_source": [390, 230, 520, 330],
+      "allowed_occlusions": ["hero_image"],
+      "forbidden_occlusions": [],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "scanner_output_port",
+      "parent_id": "scanner_shell",
+      "source_id": "scanner-source",
+      "semantic_roles": ["output_port"],
+      "z_level": 32,
+      "visible_bounds_source": [1130, 300, 100, 140],
+      "allowed_occlusions": ["result_receipt"],
+      "forbidden_occlusions": [],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "scan_beam",
+      "parent_id": "hero_image",
+      "source_id": "scan-effect",
+      "semantic_roles": ["action_actor"],
+      "z_level": 40,
+      "visible_bounds_source": [420, 250, 8, 280],
+      "allowed_occlusions": [],
+      "forbidden_occlusions": ["scanner_shell", "book_stage"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "result_receipt",
+      "parent_id": "scanner_output_port",
+      "source_id": "receipt-source",
+      "semantic_roles": ["machine_output"],
+      "z_level": 35,
+      "visible_bounds_source": [1200, 250, 420, 500],
+      "allowed_occlusions": ["scanner_output_port"],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "layer_group",
+      "parent_id": "hero_image",
+      "source_id": "hero-source",
+      "semantic_roles": ["decomposition_actor"],
+      "z_level": 45,
+      "visible_bounds_source": [180, 170, 1500, 610],
+      "allowed_occlusions": ["visible_layer", "metadata_layer", "platform_layer"],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "visible_layer",
+      "parent_id": "hero_image",
+      "source_id": "hero-source",
+      "semantic_roles": ["source_layer"],
+      "z_level": 48,
+      "visible_bounds_source": [180, 190, 500, 360],
+      "allowed_occlusions": ["metadata_layer"],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "metadata_layer",
+      "parent_id": "hero_image",
+      "source_id": "hero-source",
+      "semantic_roles": ["source_layer"],
+      "z_level": 47,
+      "visible_bounds_source": [690, 170, 500, 360],
+      "allowed_occlusions": ["visible_layer", "platform_layer"],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "platform_layer",
+      "parent_id": "hero_image",
+      "source_id": "hero-source",
+      "semantic_roles": ["source_layer"],
+      "z_level": 46,
+      "visible_bounds_source": [1200, 190, 500, 360],
+      "allowed_occlusions": ["metadata_layer"],
+      "forbidden_occlusions": ["caption_strip"],
+      "center_in_parent": {"required": false}
+    },
+    {
+      "object_id": "caption_strip",
+      "parent_id": "book_stage",
+      "source_id": "caption-source",
+      "semantic_roles": ["caption"],
+      "z_level": 200,
+      "visible_bounds_source": [400, 884, 1120, 140],
+      "allowed_occlusions": [],
+      "forbidden_occlusions": ["hero_image", "scanner_shell", "result_receipt", "layer_group"],
+      "center_in_parent": {"required": true, "geometry_status": "PASS", "optical_status": "PASS"}
+    }
+  ]
+}

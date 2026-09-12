@@ -1,0 +1,13 @@
+{
+  "schema_version": "silent-review-1.0",
+  "reviews": [
+    {
+      "time_seconds": 2.0,
+      "main_subject": "The hero image.",
+      "action": "The image is entering a scanner and a beam crosses it.",
+      "visible_result": "A result receipt leaves the scanner output port.",
+      "matches_spoken_line": "Yes. The frame communicates file inspection.",
+      "status": "PASS"
+    }
+  ]
+}

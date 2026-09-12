@@ -56,6 +56,19 @@ class ValidatorTests(unittest.TestCase):
         write_png_header(folder / "cover-3x4.png", 900, 1200)
         write_png_header(folder / "cover-4x3.png", 1200, 900)
 
+        template_map = {
+            "semantic-actions.json": "semantic-action-template.json",
+            "objects.json": "object-registry-template.json",
+            "occlusions.json": "occlusion-allowlist-template.json",
+            "silent-review.json": "silent-review-template.json",
+            "motion-recipes.json": "motion-recipe-ledger-template.json",
+        }
+        for output_name, template_name in template_map.items():
+            (folder / output_name).write_text(
+                (ROOT / "assets" / template_name).read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
         manifest = json.loads((ROOT / "assets" / "episode-template.json").read_text(encoding="utf-8"))
         manifest["project"].update({"title": "Example", "target_duration_seconds": 120})
         manifest["script"].update(
@@ -87,6 +100,11 @@ class ValidatorTests(unittest.TestCase):
             {
                 "sentence_visual_map_path": "sentence-map.json",
                 "asset_manifest_path": "assets.json",
+                "semantic_action_manifest_path": "semantic-actions.json",
+                "object_registry_path": "objects.json",
+                "occlusion_allowlist_path": "occlusions.json",
+                "silent_review_path": "silent-review.json",
+                "motion_recipe_ledger_path": "motion-recipes.json",
             }
         )
         manifest["gates"]["front40"].update(
@@ -97,6 +115,9 @@ class ValidatorTests(unittest.TestCase):
                 "canvas_edge_status": "PASS",
                 "container_center_status": "PASS",
                 "route_regression_status": "PASS",
+                "semantic_action_status": "PASS",
+                "physical_boundary_status": "PASS",
+                "silent_readability_status": "PASS",
                 "steward_status": "OWNER_PREVIEW_ALLOWED",
             }
         )
@@ -112,6 +133,11 @@ class ValidatorTests(unittest.TestCase):
                 "canvas_edge_status": "PASS",
                 "container_geometry_center_status": "PASS",
                 "container_optical_center_status": "PASS",
+                "semantic_action_status": "PASS",
+                "physical_boundary_status": "PASS",
+                "silent_readability_status": "PASS",
+                "output_origin_status": "PASS",
+                "same_source_layer_status": "PASS",
                 "original_size_frame_count": 24,
                 "dense_crop_count": 8,
                 "full_decode_status": "PASS",
@@ -138,10 +164,143 @@ class ValidatorTests(unittest.TestCase):
         path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         return path, manifest
 
-    def test_complete_v11_manifest_passes_delivery(self) -> None:
+    def test_complete_v12_manifest_passes_delivery(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path, manifest = self.make_project(Path(tmp))
             self.assertEqual(MODULE.validate(manifest, path, "deliver"), [])
+
+    def test_v11_manifest_remains_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, manifest = self.make_project(Path(tmp))
+            manifest["schema_version"] = "audio-locked-episode-1.1"
+            for key in (
+                "semantic_action_manifest_path", "object_registry_path", "occlusion_allowlist_path",
+                "silent_review_path", "motion_recipe_ledger_path",
+            ):
+                manifest["visual"].pop(key, None)
+            for key in ("semantic_action_status", "physical_boundary_status", "silent_readability_status"):
+                manifest["gates"]["front40"].pop(key, None)
+            for key in (
+                "semantic_action_status", "physical_boundary_status", "silent_readability_status",
+                "output_origin_status", "same_source_layer_status",
+            ):
+                manifest["gates"]["final"].pop(key, None)
+            self.assertEqual(MODULE.validate(manifest, path, "deliver"), [])
+
+    def load_linked(self, folder: Path, name: str) -> dict:
+        return json.loads((folder / name).read_text(encoding="utf-8"))
+
+    def save_linked(self, folder: Path, name: str, data: dict) -> None:
+        (folder / name).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def test_scan_target_must_be_primary_subject(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            objects = self.load_linked(folder, "objects.json")
+            objects["objects"].append(
+                {
+                    "object_id": "magnifier",
+                    "parent_id": "book_stage",
+                    "source_id": "magnifier-source",
+                    "semantic_roles": ["prop"],
+                    "z_level": 50,
+                    "visible_bounds_source": [100, 100, 200, 200],
+                    "allowed_occlusions": [],
+                    "forbidden_occlusions": [],
+                    "center_in_parent": {"required": False},
+                }
+            )
+            self.save_linked(folder, "objects.json", objects)
+            actions = self.load_linked(folder, "semantic-actions.json")
+            actions["semantic_actions"][0]["target_id"] = "magnifier"
+            self.save_linked(folder, "semantic-actions.json", actions)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("primary_subject" in error for error in errors))
+
+    def test_scan_trajectory_cannot_leave_target_mask_intersection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            actions = self.load_linked(folder, "semantic-actions.json")
+            actions["semantic_actions"][0]["trajectory_samples"][0]["actor_bbox"] = [895, 250, 20, 280]
+            self.save_linked(folder, "semantic-actions.json", actions)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("leaves target-mask intersection" in error for error in errors))
+
+    def test_machine_output_requires_registered_port(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            actions = self.load_linked(folder, "semantic-actions.json")
+            actions["semantic_actions"][1]["source_port_id"] = "missing-port"
+            self.save_linked(folder, "semantic-actions.json", actions)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("source_port_id is invalid" in error for error in errors))
+
+    def test_three_layers_must_share_target_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            objects = self.load_linked(folder, "objects.json")
+            next(item for item in objects["objects"] if item["object_id"] == "platform_layer")["source_id"] = "unrelated-source"
+            self.save_linked(folder, "objects.json", objects)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("layers must share one source_id" in error for error in errors))
+
+    def test_silent_review_requires_all_four_answers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            review = self.load_linked(folder, "silent-review.json")
+            review["reviews"][0]["visible_result"] = ""
+            self.save_linked(folder, "silent-review.json", review)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("visible_result is required" in error for error in errors))
+
+    def test_caption_overlap_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            occlusions = self.load_linked(folder, "occlusions.json")
+            occlusions["caption_overlaps"] = [{"caption_id": "caption_strip", "object_id": "hero_image"}]
+            self.save_linked(folder, "occlusions.json", occlusions)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("caption overlaps must be empty" in error for error in errors))
+
+    def test_required_center_needs_optical_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            objects = self.load_linked(folder, "objects.json")
+            next(item for item in objects["objects"] if item["object_id"] == "caption_strip")["center_in_parent"].pop("optical_status")
+            self.save_linked(folder, "objects.json", objects)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("optical centring must PASS" in error for error in errors))
+
+    def test_undeclared_overlap_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            occlusions = self.load_linked(folder, "occlusions.json")
+            occlusions["undeclared_overlaps"] = [{"front_id": "scanner_shell", "back_id": "caption_strip"}]
+            self.save_linked(folder, "occlusions.json", occlusions)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("undeclared overlaps must be empty" in error for error in errors))
+
+    def test_front40_new_gate_cannot_be_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, manifest = self.make_project(Path(tmp))
+            manifest["gates"]["front40"]["physical_boundary_status"] = "pending"
+            errors = MODULE.validate(manifest, path, "front40")
+            self.assertTrue(any("physical-boundary" in error for error in errors))
+
+    def test_final_output_origin_gate_cannot_be_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, manifest = self.make_project(Path(tmp))
+            manifest["gates"]["final"]["output_origin_status"] = "pending"
+            errors = MODULE.validate(manifest, path, "final")
+            self.assertTrue(any("output-origin" in error for error in errors))
 
     def test_tts_without_punctuation_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

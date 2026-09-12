@@ -13,8 +13,17 @@ from pathlib import Path
 
 
 STAGES = ("plan", "script", "audio", "front40", "final", "deliver")
-SCHEMA_VERSIONS = {"audio-locked-episode-1.0", "audio-locked-episode-1.1"}
+SCHEMA_VERSIONS = {
+    "audio-locked-episode-1.0",
+    "audio-locked-episode-1.1",
+    "audio-locked-episode-1.2",
+}
 NATURAL_PUNCTUATION = re.compile(r"[，。！？、；：,.!?;:]")
+ACTION_FIELDS = {
+    "cue_id", "audio_in", "audio_out", "spoken_line", "actor_id", "target_id",
+    "action_type", "action", "visible_result", "forbidden_misread", "closing_state",
+}
+HIGH_RISK_ACTIONS = {"scan", "inspect", "crop", "screenshot"}
 
 
 def read_json(path: Path) -> dict:
@@ -39,6 +48,188 @@ def require_file(errors: list[str], raw: str, manifest: Path, label: str) -> Non
     require(errors, bool(raw), f"{label} is empty")
     if raw:
         require(errors, resolve_path(raw, manifest).is_file(), f"{label} does not exist: {raw}")
+
+
+def read_linked_json(errors: list[str], raw: str, manifest: Path, label: str) -> dict | None:
+    require_file(errors, raw, manifest, label)
+    if not raw:
+        return None
+    path = resolve_path(raw, manifest)
+    if not path.is_file():
+        return None
+    try:
+        return read_json(path)
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        errors.append(f"{label} is not valid UTF-8 JSON: {exc}")
+        return None
+
+
+def valid_bbox(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) == 4
+        and all(isinstance(item, (int, float)) for item in value)
+        and value[2] > 0
+        and value[3] > 0
+    )
+
+
+def bbox_inside(inner: list[float], outer: list[float], tolerance: float = 0.0) -> bool:
+    ix, iy, iw, ih = inner
+    ox, oy, ow, oh = outer
+    return (
+        ix >= ox - tolerance
+        and iy >= oy - tolerance
+        and ix + iw <= ox + ow + tolerance
+        and iy + ih <= oy + oh + tolerance
+    )
+
+
+def intersect_bbox(a: list[float], b: list[float]) -> list[float] | None:
+    x0, y0 = max(a[0], b[0]), max(a[1], b[1])
+    x1, y1 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return [x0, y0, x1 - x0, y1 - y0]
+
+
+def validate_v12_evidence(errors: list[str], data: dict, manifest: Path) -> None:
+    visual = data.get("visual", {})
+    linked: dict[str, dict | None] = {}
+    for key in (
+        "semantic_action_manifest_path",
+        "object_registry_path",
+        "occlusion_allowlist_path",
+        "silent_review_path",
+        "motion_recipe_ledger_path",
+    ):
+        linked[key] = read_linked_json(errors, visual.get(key, ""), manifest, f"visual.{key}")
+
+    registry = linked["object_registry_path"]
+    object_by_id: dict[str, dict] = {}
+    if registry is not None:
+        objects = registry.get("objects")
+        require(errors, isinstance(objects, list) and bool(objects), "object registry must contain objects")
+        if isinstance(objects, list):
+            for index, obj in enumerate(objects):
+                label = f"object registry item {index + 1}"
+                require(errors, isinstance(obj, dict), f"{label} must be an object")
+                if not isinstance(obj, dict):
+                    continue
+                for field in (
+                    "object_id", "parent_id", "source_id", "z_level", "visible_bounds_source",
+                    "allowed_occlusions", "forbidden_occlusions", "center_in_parent",
+                ):
+                    require(errors, field in obj, f"{label}.{field} is required")
+                object_id = obj.get("object_id")
+                require(errors, isinstance(object_id, str) and bool(object_id), f"{label}.object_id is required")
+                if isinstance(object_id, str) and object_id:
+                    require(errors, object_id not in object_by_id, f"duplicate object_id: {object_id}")
+                    object_by_id[object_id] = obj
+                require(errors, valid_bbox(obj.get("visible_bounds_source")), f"{label}.visible_bounds_source must be [x,y,w,h]")
+                require(errors, isinstance(obj.get("z_level"), (int, float)), f"{label}.z_level must be numeric")
+                require(errors, isinstance(obj.get("allowed_occlusions"), list), f"{label}.allowed_occlusions must be an array")
+                require(errors, isinstance(obj.get("forbidden_occlusions"), list), f"{label}.forbidden_occlusions must be an array")
+                center = obj.get("center_in_parent")
+                require(errors, isinstance(center, dict), f"{label}.center_in_parent must be an object")
+                if isinstance(center, dict) and center.get("required") is True:
+                    require(errors, center.get("geometry_status") == "PASS", f"{label} geometry centring must PASS")
+                    require(errors, center.get("optical_status") == "PASS", f"{label} optical centring must PASS")
+            for object_id, obj in object_by_id.items():
+                parent_id = obj.get("parent_id")
+                require(
+                    errors,
+                    parent_id is None or parent_id in object_by_id,
+                    f"object {object_id} references unknown parent_id: {parent_id}",
+                )
+
+    action_manifest = linked["semantic_action_manifest_path"]
+    if action_manifest is not None:
+        actions = action_manifest.get("semantic_actions")
+        require(errors, isinstance(actions, list) and bool(actions), "semantic action manifest must contain semantic_actions")
+        if isinstance(actions, list):
+            cue_ids: set[object] = set()
+            for index, action in enumerate(actions):
+                label = f"semantic action {index + 1}"
+                require(errors, isinstance(action, dict), f"{label} must be an object")
+                if not isinstance(action, dict):
+                    continue
+                for field in sorted(ACTION_FIELDS):
+                    require(errors, field in action and action.get(field) not in (None, ""), f"{label}.{field} is required")
+                cue_id = action.get("cue_id")
+                require(errors, cue_id not in cue_ids, f"duplicate semantic action cue_id: {cue_id}")
+                cue_ids.add(cue_id)
+                start, end = action.get("audio_in"), action.get("audio_out")
+                require(errors, isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start, f"{label} audio range is invalid")
+                actor_id, target_id = action.get("actor_id"), action.get("target_id")
+                require(errors, actor_id in object_by_id, f"{label} references unknown actor_id: {actor_id}")
+                require(errors, target_id in object_by_id, f"{label} references unknown target_id: {target_id}")
+                action_type = action.get("action_type")
+                if action_type in HIGH_RISK_ACTIONS and target_id in object_by_id:
+                    roles = object_by_id[target_id].get("semantic_roles", [])
+                    require(errors, "primary_subject" in roles, f"{label} high-risk action must target a primary_subject")
+                samples = action.get("trajectory_samples", [])
+                if action_type == "scan":
+                    require(errors, isinstance(samples, list) and bool(samples), f"{label} scan requires trajectory_samples")
+                    for sample_index, sample in enumerate(samples if isinstance(samples, list) else []):
+                        sample_label = f"{label} trajectory sample {sample_index + 1}"
+                        actor_bbox = sample.get("actor_bbox") if isinstance(sample, dict) else None
+                        target_bbox = sample.get("target_bbox") if isinstance(sample, dict) else None
+                        mask_bbox = sample.get("mask_bbox") if isinstance(sample, dict) else None
+                        require(errors, valid_bbox(actor_bbox), f"{sample_label}.actor_bbox is invalid")
+                        require(errors, valid_bbox(target_bbox), f"{sample_label}.target_bbox is invalid")
+                        require(errors, valid_bbox(mask_bbox), f"{sample_label}.mask_bbox is invalid")
+                        if valid_bbox(actor_bbox) and valid_bbox(target_bbox) and valid_bbox(mask_bbox):
+                            intersection = intersect_bbox(target_bbox, mask_bbox)
+                            require(errors, intersection is not None, f"{sample_label} target and mask do not intersect")
+                            if intersection is not None:
+                                require(errors, bbox_inside(actor_bbox, intersection), f"{sample_label} leaves target-mask intersection")
+                if action_type == "output":
+                    producer_id, source_port_id = action.get("producer_id"), action.get("source_port_id")
+                    require(errors, producer_id in object_by_id, f"{label} output producer_id is invalid")
+                    require(errors, source_port_id in object_by_id, f"{label} output source_port_id is invalid")
+                if action_type == "decompose_layers":
+                    layer_ids = action.get("layer_ids")
+                    require(errors, isinstance(layer_ids, list) and len(layer_ids) >= 3, f"{label} requires at least three layer_ids")
+                    layers = [object_by_id.get(item) for item in layer_ids] if isinstance(layer_ids, list) else []
+                    require(errors, all(layer is not None for layer in layers), f"{label} references unknown layer_ids")
+                    if layers and all(layer is not None for layer in layers) and target_id in object_by_id:
+                        source_ids = {layer.get("source_id") for layer in layers}
+                        require(errors, len(source_ids) == 1, f"{label} layers must share one source_id")
+                        require(errors, source_ids == {object_by_id[target_id].get("source_id")}, f"{label} layers must share the target source_id")
+                        require(errors, action.get("decomposition_parent_id") == target_id, f"{label} decomposition_parent_id must equal target_id")
+
+    occlusions = linked["occlusion_allowlist_path"]
+    if occlusions is not None:
+        require(errors, occlusions.get("status") == "PASS", "occlusion report status must PASS")
+        require(errors, occlusions.get("undeclared_overlaps") == [], "undeclared overlaps must be empty")
+        require(errors, occlusions.get("caption_overlaps") == [], "caption overlaps must be empty")
+        allowlist = occlusions.get("allowlist")
+        require(errors, isinstance(allowlist, list), "occlusion allowlist must be an array")
+        for index, item in enumerate(allowlist if isinstance(allowlist, list) else []):
+            label = f"occlusion allowlist item {index + 1}"
+            require(errors, item.get("front_id") in object_by_id, f"{label}.front_id is invalid")
+            require(errors, item.get("back_id") in object_by_id, f"{label}.back_id is invalid")
+            require(errors, valid_bbox(item.get("allowed_region")), f"{label}.allowed_region is invalid")
+
+    silent = linked["silent_review_path"]
+    if silent is not None:
+        reviews = silent.get("reviews")
+        require(errors, isinstance(reviews, list) and bool(reviews), "silent review must contain reviews")
+        for index, review in enumerate(reviews if isinstance(reviews, list) else []):
+            label = f"silent review {index + 1}"
+            for field in ("time_seconds", "main_subject", "action", "visible_result", "matches_spoken_line"):
+                require(errors, review.get(field) not in (None, ""), f"{label}.{field} is required")
+            require(errors, review.get("status") == "PASS", f"{label}.status must PASS")
+
+    recipes = linked["motion_recipe_ledger_path"]
+    if recipes is not None:
+        items = recipes.get("recipes")
+        require(errors, isinstance(items, list) and bool(items), "motion recipe ledger must contain recipes")
+        for index, item in enumerate(items if isinstance(items, list) else []):
+            label = f"motion recipe {index + 1}"
+            for field in ("cue_id", "recipe", "source_kind", "implementation"):
+                require(errors, item.get(field) not in (None, ""), f"{label}.{field} is required")
 
 
 def parse_timestamp(value: str) -> float:
@@ -134,7 +325,8 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
     errors: list[str] = []
     schema_version = data.get("schema_version")
     require(errors, schema_version in SCHEMA_VERSIONS, "unsupported schema_version")
-    is_v11 = schema_version == "audio-locked-episode-1.1"
+    is_v11 = schema_version in {"audio-locked-episode-1.1", "audio-locked-episode-1.2"}
+    is_v12 = schema_version == "audio-locked-episode-1.2"
 
     project = data.get("project", {})
     require(errors, bool(project.get("title")), "project.title is required")
@@ -228,6 +420,8 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
                 screen_path = resolve_path(jianying["screen_caption_srt"], manifest)
                 if screen_path.is_file():
                     validate_srt(errors, screen_path)
+        if is_v12:
+            validate_v12_evidence(errors, data, manifest)
 
     if stage in STAGES[3:]:
         front = data.get("gates", {}).get("front40", {})
@@ -246,6 +440,10 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
             require(errors, front.get("canvas_edge_status") == "PASS", "front40 canvas-edge gate must PASS")
             require(errors, front.get("container_center_status") == "PASS", "front40 container-centre gate must PASS")
             require(errors, front.get("route_regression_status") == "PASS", "front40 route regression must PASS")
+        if is_v12:
+            require(errors, front.get("semantic_action_status") == "PASS", "front40 semantic-action gate must PASS")
+            require(errors, front.get("physical_boundary_status") == "PASS", "front40 physical-boundary gate must PASS")
+            require(errors, front.get("silent_readability_status") == "PASS", "front40 silent-readability gate must PASS")
         require(errors, front.get("steward_status") == "OWNER_PREVIEW_ALLOWED", "front40 steward must allow preview")
 
     if stage in STAGES[4:]:
@@ -261,6 +459,12 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
             require(errors, final.get("canvas_edge_status") == "PASS", "final canvas-edge gate must PASS")
             require(errors, final.get("container_geometry_center_status") == "PASS", "container geometry-centre gate must PASS")
             require(errors, final.get("container_optical_center_status") == "PASS", "container optical-centre gate must PASS")
+        if is_v12:
+            require(errors, final.get("semantic_action_status") == "PASS", "final semantic-action gate must PASS")
+            require(errors, final.get("physical_boundary_status") == "PASS", "final physical-boundary gate must PASS")
+            require(errors, final.get("silent_readability_status") == "PASS", "final silent-readability gate must PASS")
+            require(errors, final.get("output_origin_status") == "PASS", "final output-origin gate must PASS")
+            require(errors, final.get("same_source_layer_status") == "PASS", "final same-source layer gate must PASS")
         duration_for_qa = duration if isinstance(duration, (int, float)) and duration > 0 else 0
         required_frames = max(24, math.ceil(duration_for_qa / 10))
         required_crops = max(8, math.ceil(duration_for_qa / 30))

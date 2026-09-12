@@ -62,6 +62,16 @@ caption | semantic mark target_id | closing state
 
 Reject the map when any spoken change has no corresponding visual state, or when the picture cannot communicate the takeaway with sound muted.
 
+For schema 1.2, keep five machine-readable evidence files alongside the episode ledger:
+
+- object registry: stable IDs, parent, source, z-level, source bounds, occlusion rules, and centring evidence
+- semantic actions: one `actor_id -> target_id -> action -> visible_result -> closing_state` record per meaning unit
+- occlusion allowlist: physical overlaps plus empty undeclared and caption-overlap arrays
+- silent review: the subject, action, result, and spoken-line match for every representative state
+- motion recipe ledger: chosen motion vocabulary, provenance, and the original implementation decision
+
+`scan`, `inspect`, `crop`, and `screenshot` must target a registered `primary_subject`. A scan also stores trajectory samples and proves that each beam box remains inside the visible target and hard-mask intersection. Machine output declares its producer and output port. Layer decomposition declares at least three child layers, one parent target, and one shared `source_id`.
+
 Pacing rules:
 
 - Keep one full sentence or one complete meaning in one stable theatre.
@@ -136,6 +146,7 @@ Before showing the sample, require:
 - original-size frame inspection
 - enlarged crops for dense overlaps
 - an independent steward verdict
+- semantic-action, physical-boundary, and silent-readability gates marked `PASS`
 
 User approval means the style, caption rail, marks, and performance grammar may be reused. It does not approve the remaining duration.
 
@@ -146,6 +157,7 @@ If the first-40 sample fails because the route itself is wrong—for example fla
 - After the user approves the proof mechanism, complete the entire requested episode. Build the remainder internally in natural 45–60 second chapters, but do not turn those construction units into repeated approval gates unless a new risky mechanism or materially different layout appears.
 - Preserve accepted intervals. Rerender only a failed interval unless a global defect is proven.
 - Re-run whole-film geometry and semantic checks from zero. Do not inherit the first-40 verdict.
+- Re-read all schema 1.2 evidence files. Require semantic action, physical boundary, silent readability, output origin, and same-source layer gates to pass again for the complete film.
 - Re-run canvas-edge, all-object collision, z-order, semantic-mark, and container geometry/optical-centre checks from zero. Inspect every semantic mark, not only a sample.
 - Inspect at least `max(24, ceil(duration_seconds / 10))` original-size frames and `max(8, ceil(duration_seconds / 30))` enlarged dense-region crops. These are floors, not substitutes for covering every state change, semantic mark, and high-risk overlap.
 - Decode the entire output and inspect black frames, frozen intervals, audio peaks, joins, and final-frame holds.
@@ -161,15 +173,15 @@ If the first-40 sample fails because the route itself is wrong—for example fla
 
 ## Required manifest and validation
 
-Copy `assets/audio-locked-episode-template.json` to the episode folder and maintain it as the production ledger.
+Copy `assets/episode-template.json` to the episode folder and maintain it as the production ledger. Schema 1.2 also requires the five linked evidence files described in Gate 3.
 
 ```bash
-python scripts/validate_audio_locked_episode.py /absolute/path/to/episode.json --stage plan
-python scripts/validate_audio_locked_episode.py /absolute/path/to/episode.json --stage script
-python scripts/validate_audio_locked_episode.py /absolute/path/to/episode.json --stage audio
-python scripts/validate_audio_locked_episode.py /absolute/path/to/episode.json --stage front40
-python scripts/validate_audio_locked_episode.py /absolute/path/to/episode.json --stage final
-python scripts/validate_audio_locked_episode.py /absolute/path/to/episode.json --stage deliver
+python scripts/validate_episode.py /absolute/path/to/episode.json --stage plan
+python scripts/validate_episode.py /absolute/path/to/episode.json --stage script
+python scripts/validate_episode.py /absolute/path/to/episode.json --stage audio
+python scripts/validate_episode.py /absolute/path/to/episode.json --stage front40
+python scripts/validate_episode.py /absolute/path/to/episode.json --stage final
+python scripts/validate_episode.py /absolute/path/to/episode.json --stage deliver
 ```
 
 This validator checks the ledger and required artifacts. It does not inspect visual taste or replace the DAO geometry gate, semantic-mark review, or independent steward.

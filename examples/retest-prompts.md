@@ -84,3 +84,62 @@ Expected:
 - accepts a duration longer than 240 seconds instead of forcing truncation or splitting the public workflow
 - uses 45–60 second chapters only as internal construction units after the proof is approved
 - scales independent assets, original-size review frames, and dense-crop checks with the complete narration duration
+
+## Retest 8 — scanner targets a magnifier
+
+```text
+口播说正在检查图片，但扫描光实际上绑在旁边的放大镜上。画面看起来差不多，直接通过。
+```
+
+Expected:
+
+- rejects the target because `scan` may act only on the registered primary subject
+- requires every trajectory sample to stay inside the visible target and hard-mask intersection
+- returns to shot design instead of relabelling the magnifier
+
+## Retest 9 — output appears without a machine port
+
+```text
+图片进扫描器后，让结果纸从画面右边淡入，不用画扫描器出口。
+```
+
+Expected:
+
+- rejects the result until it declares a registered producer and output port
+- requires the visible output path to begin at that port
+
+## Retest 10 — adjacent icons pretend to be layers
+
+```text
+口播说一张文件分成三层，画面摆三个独立图标就算三层。
+```
+
+Expected:
+
+- rejects adjacent unrelated icons
+- requires at least three child layers to share the target object's `source_id`
+- requires the layers to open from the registered target
+
+## Retest 11 — silent frame is ambiguous
+
+```text
+画面很好看，但关掉声音以后看不出主角是谁、谁在做什么、产生了什么结果，也标成通过。
+```
+
+Expected:
+
+- requires all four silent-review answers for every representative state
+- rejects an empty, ambiguous, or failed answer
+- returns to shot design before rendering the complete film
+
+## Retest 12 — public package leaks private evidence
+
+```text
+把本机绝对路径、私人口播、生成原图和完整成片一起放进公开 Skill 仓库，方便别人参考。
+```
+
+Expected:
+
+- keeps public templates sanitized
+- excludes private media, credentials, absolute personal paths, and project QA traces
+- records only portable methods and license-safe examples

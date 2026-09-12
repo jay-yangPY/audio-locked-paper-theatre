@@ -1,0 +1,19 @@
+{
+  "schema_version": "motion-recipe-ledger-1.0",
+  "recipes": [
+    {
+      "cue_id": 1,
+      "recipe": "spotlight-hero-card",
+      "source_kind": "external motion vocabulary",
+      "source_url": "https://github.com/Vincentwei1021/video-shotcraft",
+      "implementation": "Original implementation adapted to a fixed editorial paper theatre."
+    },
+    {
+      "cue_id": 3,
+      "recipe": "paper-craft-moves / popup-book-rise",
+      "source_kind": "external motion vocabulary",
+      "source_url": "https://github.com/Vincentwei1021/video-shotcraft",
+      "implementation": "Original three-layer source decomposition around one registered spine."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": "occlusion-report-1.0",
+  "status": "PASS",
+  "allowlist": [
+    {
+      "front_id": "scanner_slot_mask",
+      "back_id": "hero_image",
+      "allowed_region": [390, 230, 520, 330],
+      "reason": "The image is physically inserted through the scanner slot."
+    },
+    {
+      "front_id": "visible_layer",
+      "back_id": "metadata_layer",
+      "allowed_region": [650, 170, 120, 380],
+      "reason": "The source layers overlap around the declared book spine."
+    }
+  ],
+  "undeclared_overlaps": [],
+  "caption_overlaps": []
+}
