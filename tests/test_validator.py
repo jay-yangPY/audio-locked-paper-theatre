@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import struct
 import tempfile
@@ -49,6 +50,7 @@ class ValidatorTests(unittest.TestCase):
             "release.md",
             "qa.json",
             "sha256.txt",
+            "runtime-compatibility.md",
         ):
             write_file(folder / name)
         write_srt(folder / "tts.srt", punctuated=True)
@@ -62,6 +64,9 @@ class ValidatorTests(unittest.TestCase):
             "occlusions.json": "occlusion-allowlist-template.json",
             "silent-review.json": "silent-review-template.json",
             "motion-recipes.json": "motion-recipe-ledger-template.json",
+            "semantic-focus.json": "semantic-focus-template.json",
+            "asset-generation.json": "asset-generation-template.json",
+            "background-music.json": "background-music-ledger-template.json",
         }
         for output_name, template_name in template_map.items():
             (folder / output_name).write_text(
@@ -70,6 +75,17 @@ class ValidatorTests(unittest.TestCase):
             )
 
         manifest = json.loads((ROOT / "assets" / "episode-template.json").read_text(encoding="utf-8"))
+        bgm_ledger = self.load_linked(folder, "background-music.json")
+        bgm_ledger.update(
+            {
+                "source_path": "bgm.wav",
+                "sha256": hashlib.sha256((folder / "bgm.wav").read_bytes()).hexdigest(),
+                "provenance_status": "PASS",
+                "audible_review_status": "PASS",
+                "speech_masking_status": "PASS",
+            }
+        )
+        self.save_linked(folder, "background-music.json", bgm_ledger)
         manifest["project"].update({"title": "Example", "target_duration_seconds": 120})
         manifest["script"].update(
             {
@@ -94,6 +110,7 @@ class ValidatorTests(unittest.TestCase):
                 "sample_rate_hz": 48000,
                 "channels": 2,
                 "bgm_path": "bgm.wav",
+                "background_music_ledger_path": "background-music.json",
             }
         )
         manifest["visual"].update(
@@ -105,6 +122,8 @@ class ValidatorTests(unittest.TestCase):
                 "occlusion_allowlist_path": "occlusions.json",
                 "silent_review_path": "silent-review.json",
                 "motion_recipe_ledger_path": "motion-recipes.json",
+                "semantic_focus_manifest_path": "semantic-focus.json",
+                "asset_generation_manifest_path": "asset-generation.json",
             }
         )
         manifest["gates"]["front40"].update(
@@ -138,10 +157,26 @@ class ValidatorTests(unittest.TestCase):
                 "silent_readability_status": "PASS",
                 "output_origin_status": "PASS",
                 "same_source_layer_status": "PASS",
+                "semantic_focus_status": "PASS",
+                "background_music_status": "PASS",
+                "runtime_compatibility_status": "PASS",
+                "repository_identity_status": "PASS",
                 "original_size_frame_count": 24,
                 "dense_crop_count": 8,
                 "full_decode_status": "PASS",
                 "steward_status": "OWNER_PREVIEW_ALLOWED",
+            }
+        )
+        manifest["release"].update(
+            {
+                "runtime_compatibility_path": "runtime-compatibility.md",
+                "show_repository_identity": True,
+                "repository_identity": {
+                    "skill_name": "audio-locked-paper-theatre",
+                    "repository_url": "https://github.com/example/audio-locked-paper-theatre",
+                    "text_fidelity_status": "PASS",
+                    "foreground_protection_status": "PASS",
+                },
             }
         )
         manifest["delivery"].update(
@@ -164,9 +199,21 @@ class ValidatorTests(unittest.TestCase):
         path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         return path, manifest
 
-    def test_complete_v12_manifest_passes_delivery(self) -> None:
+    def test_complete_v13_manifest_passes_delivery(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path, manifest = self.make_project(Path(tmp))
+            self.assertEqual(MODULE.validate(manifest, path, "deliver"), [])
+
+    def test_v12_manifest_remains_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, manifest = self.make_project(Path(tmp))
+            manifest["schema_version"] = "audio-locked-episode-1.2"
+            manifest["audio"].pop("background_music_ledger_path", None)
+            manifest["visual"].pop("semantic_focus_manifest_path", None)
+            manifest["visual"].pop("asset_generation_manifest_path", None)
+            manifest.pop("release", None)
+            for key in ("semantic_focus_status", "background_music_status", "runtime_compatibility_status", "repository_identity_status"):
+                manifest["gates"]["final"].pop(key, None)
             self.assertEqual(MODULE.validate(manifest, path, "deliver"), [])
 
     def test_v11_manifest_remains_compatible(self) -> None:
@@ -310,6 +357,37 @@ class ValidatorTests(unittest.TestCase):
             errors = MODULE.validate(manifest, path, "script")
             self.assertTrue(any("natural punctuation" in error for error in errors))
 
+    def test_screen_caption_terminal_punctuation_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            write_srt(folder / "screen.srt", punctuated=True)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("omit terminal punctuation" in error for error in errors))
+
+    def test_visible_text_foreground_occlusion_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            occlusions = self.load_linked(folder, "occlusions.json")
+            occlusions["visible_text_occlusions"] = [{"text_id": "caption_strip", "occluder_id": "clapper"}]
+            self.save_linked(folder, "occlusions.json", occlusions)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("visible text occlusions" in error for error in errors))
+
+    def test_isolated_asset_crop_edge_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            objects = self.load_linked(folder, "objects.json")
+            hero = next(item for item in objects["objects"] if item["object_id"] == "hero_image")
+            hero["isolated_asset"] = True
+            hero["alpha_edge_margin_px"] = {"left": 0, "top": 8, "right": 8, "bottom": 8}
+            hero["source_edge_status"] = "PASS"
+            self.save_linked(folder, "objects.json", objects)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("source crop edge" in error for error in errors))
+
     def test_mirror_padding_policy_is_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path, manifest = self.make_project(Path(tmp))
@@ -349,6 +427,54 @@ class ValidatorTests(unittest.TestCase):
             manifest["gates"]["final"]["original_size_frame_count"] = 60
             manifest["gates"]["final"]["dense_crop_count"] = 20
             self.assertEqual(MODULE.validate(manifest, path, "final"), [])
+
+    def test_semantic_focus_wrong_target_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            focus = self.load_linked(folder, "semantic-focus.json")
+            focus["focus_events"][0]["mark_center"] = [700, 390]
+            self.save_linked(folder, "semantic-focus.json", focus)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("wrong target" in error for error in errors))
+
+    def test_background_music_hash_mismatch_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            bgm = self.load_linked(folder, "background-music.json")
+            bgm["sha256"] = "0" * 64
+            self.save_linked(folder, "background-music.json", bgm)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("hash does not match" in error for error in errors))
+
+    def test_builtin_imagegen_requires_available_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            assets = self.load_linked(folder, "asset-generation.json")
+            assets["runtime_capabilities"]["image_generation_available"] = False
+            self.save_linked(folder, "asset-generation.json", assets)
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("requires an available image-generation tool" in error for error in errors))
+
+    def test_no_imagegen_runtime_can_use_user_supplied_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            path, manifest = self.make_project(folder)
+            assets = self.load_linked(folder, "asset-generation.json")
+            assets["mode"] = "user_supplied"
+            assets["runtime_capabilities"]["image_generation_available"] = False
+            assets["assets"][0]["source_mode"] = "user_supplied"
+            self.save_linked(folder, "asset-generation.json", assets)
+            self.assertEqual(MODULE.validate(manifest, path, "audio"), [])
+
+    def test_repository_identity_is_required_when_shown(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path, manifest = self.make_project(Path(tmp))
+            manifest["release"]["repository_identity"]["repository_url"] = "github.com/example/repo"
+            errors = MODULE.validate(manifest, path, "audio")
+            self.assertTrue(any("full GitHub repository URL" in error for error in errors))
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ external first draft
 - Before human approval, test whether a beginner can restate the mechanism without seeing the draft.
 - The owner selects the voice, speaking speed, and pauses while generating narration in the editor. Do not reject or reshape a script through a fixed characters-per-second or playback-speed threshold.
 - After the owner returns the generated narration, its real waveform, wording, pauses, and duration become authoritative. The production side must not change playback speed, close pauses, or time-compress the recording unless the owner explicitly requests it. If the spoken wording differs from the locked text, update the transcript and subtitle source to match the audio.
-- The formal editor handoff is two distinct assets. The editor-TTS SRT preserves natural punctuation, timecodes, sentence gaps, and intentional pauses so generated speech does not run words together. The later screen-caption SRT follows the returned real audio and may omit trailing punctuation for a cleaner screen. Never overwrite one with the other or call an untimed TXT the formal production asset. Do not split two-character words, proper names, or one continuous semantic phrase across cues.
+- The formal editor handoff is two distinct assets. The editor-TTS SRT preserves natural punctuation, timecodes, sentence gaps, and intentional pauses so generated speech does not run words together. The later screen-caption SRT follows the returned real audio and omits terminal punctuation for a cleaner screen while retaining useful internal punctuation. Never overwrite one with the other or call an untimed TXT the formal production asset. Do not split two-character words, proper names, or one continuous semantic phrase across cues.
 
 ## Gate 2 — voice master lock
 
@@ -116,6 +116,8 @@ Useful recurring motions include card slide, page flip, paper tear, wheel turn, 
 - Do not split a continuous Chinese word or phrase. Use at most two lines.
 - Important words may use semantic accent colours, but require sufficient contrast plus an edge or outline that survives the paper texture.
 - For every visible text, numeral, icon, button, badge, or card child, register the parent container and `center_in_parent`. Check both coordinate geometry and final rendered-pixel optical centring. Either failure blocks release.
+- Geometric and optical centring do not prove that text is readable. Register the final rendered glyph bounds plus safety padding as a foreground protection region. Any unrelated prop, character, mask, transition, or platform-safe overlay covering that region is a hard failure. Text may be covered only by its own declared transition while the text is intentionally not yet visible.
+- For every isolated transparent asset, measure the non-transparent alpha bounds against all four source edges. A subject touching an undeclared edge is treated as cropped and must be replaced from a complete source; resizing, `object-fit: contain`, or adding canvas padding cannot restore missing pixels.
 
 ### Circles, lines, and arrows
 
@@ -171,9 +173,16 @@ If the first-40 sample fails because the route itself is wrong—for example fla
 - Deliver the final video, clean or remixable master when available, timed subtitle file, native 3:4 cover, native 4:3 cover, platform titles/copy/topics, QA report, and hashes.
 - Covers are separately AI-generated and composed in each ratio. Verify every Chinese glyph, phone-size subject clarity, title-container geometry and optical centring, safe areas, platform UI overlap, character anatomy, and semantic circles. Never crop one accepted ratio into the other.
 
+## Runtime, asset, focus, and music evidence
+
+- Inspect the current runtime before asset production. Use `builtin_imagegen` only when an image-generation tool is callable. Without it, use user-supplied or licensed local assets and keep provenance visible in `asset-generation.json`.
+- Register semantic circles, arrows, spotlights, and magnifier callouts in `semantic-focus.json`. Measure the pointer centre and target centre; the declared tolerance may not exceed 8 pixels.
+- Register the actual BGM file, SHA-256, role, render gain, audible review, and speech-masking review in `background-music.json`. A familiar filename is not proof that it is the previous track.
+- If the film displays an open-source Skill or GitHub link, store the exact Skill name and full repository URL in the release ledger, then verify text fidelity and foreground protection on the encoded frame.
+
 ## Required manifest and validation
 
-Copy `assets/episode-template.json` to the episode folder and maintain it as the production ledger. Schema 1.2 also requires the five linked evidence files described in Gate 3.
+Copy `assets/episode-template.json` to the episode folder and maintain it as the production ledger. Schema 1.3 requires the existing five evidence files plus semantic focus, asset generation, background music, and runtime compatibility evidence. Schemas 1.0, 1.1, and 1.2 remain readable for older projects.
 
 ```bash
 python scripts/validate_episode.py /absolute/path/to/episode.json --stage plan

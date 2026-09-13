@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -17,13 +18,16 @@ SCHEMA_VERSIONS = {
     "audio-locked-episode-1.0",
     "audio-locked-episode-1.1",
     "audio-locked-episode-1.2",
+    "audio-locked-episode-1.3",
 }
 NATURAL_PUNCTUATION = re.compile(r"[，。！？、；：,.!?;:]")
+TERMINAL_SCREEN_PUNCTUATION = re.compile(r"[，。！？；：、,.!?;:…]+[”’）》】」』]*$")
 ACTION_FIELDS = {
     "cue_id", "audio_in", "audio_out", "spoken_line", "actor_id", "target_id",
     "action_type", "action", "visible_result", "forbidden_misread", "closing_state",
 }
 HIGH_RISK_ACTIONS = {"scan", "inspect", "crop", "screenshot"}
+ASSET_GENERATION_MODES = {"builtin_imagegen", "external_generator", "user_supplied", "local_library"}
 
 
 def read_json(path: Path) -> dict:
@@ -48,6 +52,14 @@ def require_file(errors: list[str], raw: str, manifest: Path, label: str) -> Non
     require(errors, bool(raw), f"{label} is empty")
     if raw:
         require(errors, resolve_path(raw, manifest).is_file(), f"{label} does not exist: {raw}")
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest().lower()
 
 
 def read_linked_json(errors: list[str], raw: str, manifest: Path, label: str) -> dict | None:
@@ -93,7 +105,7 @@ def intersect_bbox(a: list[float], b: list[float]) -> list[float] | None:
     return [x0, y0, x1 - x0, y1 - y0]
 
 
-def validate_v12_evidence(errors: list[str], data: dict, manifest: Path) -> None:
+def validate_v12_evidence(errors: list[str], data: dict, manifest: Path) -> dict[str, dict]:
     visual = data.get("visual", {})
     linked: dict[str, dict | None] = {}
     for key in (
@@ -118,7 +130,7 @@ def validate_v12_evidence(errors: list[str], data: dict, manifest: Path) -> None
                     continue
                 for field in (
                     "object_id", "parent_id", "source_id", "z_level", "visible_bounds_source",
-                    "allowed_occlusions", "forbidden_occlusions", "center_in_parent",
+                    "allowed_occlusions", "forbidden_occlusions", "center_in_parent", "content_kind",
                 ):
                     require(errors, field in obj, f"{label}.{field} is required")
                 object_id = obj.get("object_id")
@@ -135,6 +147,19 @@ def validate_v12_evidence(errors: list[str], data: dict, manifest: Path) -> None
                 if isinstance(center, dict) and center.get("required") is True:
                     require(errors, center.get("geometry_status") == "PASS", f"{label} geometry centring must PASS")
                     require(errors, center.get("optical_status") == "PASS", f"{label} optical centring must PASS")
+                if obj.get("content_kind") in {"text", "title", "label", "caption", "numeral", "badge_text"}:
+                    protection = obj.get("text_protection")
+                    require(errors, isinstance(protection, dict), f"{label}.text_protection is required for visible text")
+                    if isinstance(protection, dict):
+                        require(errors, valid_bbox(protection.get("final_glyph_bbox")), f"{label}.text_protection.final_glyph_bbox is invalid")
+                        require(errors, isinstance(protection.get("safety_padding_px"), (int, float)) and protection.get("safety_padding_px", 0) >= 4, f"{label} text safety padding must be at least 4px")
+                        require(errors, protection.get("foreground_status") == "PASS", f"{label} visible text must have zero unapproved foreground occlusion")
+                if obj.get("isolated_asset") is True:
+                    margins = obj.get("alpha_edge_margin_px")
+                    require(errors, isinstance(margins, dict), f"{label}.alpha_edge_margin_px is required for isolated assets")
+                    if isinstance(margins, dict):
+                        require(errors, all(isinstance(margins.get(side), (int, float)) and margins.get(side, 0) > 0 for side in ("left", "top", "right", "bottom")), f"{label} isolated subject touches a source crop edge")
+                    require(errors, obj.get("source_edge_status") == "PASS", f"{label} isolated source-edge status must PASS")
             for object_id, obj in object_by_id.items():
                 parent_id = obj.get("parent_id")
                 require(
@@ -204,6 +229,8 @@ def validate_v12_evidence(errors: list[str], data: dict, manifest: Path) -> None
         require(errors, occlusions.get("status") == "PASS", "occlusion report status must PASS")
         require(errors, occlusions.get("undeclared_overlaps") == [], "undeclared overlaps must be empty")
         require(errors, occlusions.get("caption_overlaps") == [], "caption overlaps must be empty")
+        require(errors, occlusions.get("visible_text_occlusions") == [], "visible text occlusions must be empty")
+        require(errors, occlusions.get("cropped_asset_ids") == [], "cropped isolated assets must be empty")
         allowlist = occlusions.get("allowlist")
         require(errors, isinstance(allowlist, list), "occlusion allowlist must be an array")
         for index, item in enumerate(allowlist if isinstance(allowlist, list) else []):
@@ -230,6 +257,105 @@ def validate_v12_evidence(errors: list[str], data: dict, manifest: Path) -> None
             label = f"motion recipe {index + 1}"
             for field in ("cue_id", "recipe", "source_kind", "implementation"):
                 require(errors, item.get(field) not in (None, ""), f"{label}.{field} is required")
+    return object_by_id
+
+
+def validate_v13_evidence(errors: list[str], data: dict, manifest: Path, object_by_id: dict[str, dict]) -> None:
+    visual = data.get("visual", {})
+
+    focus = read_linked_json(
+        errors,
+        visual.get("semantic_focus_manifest_path", ""),
+        manifest,
+        "visual.semantic_focus_manifest_path",
+    )
+    if focus is not None:
+        events = focus.get("focus_events")
+        require(errors, isinstance(events, list) and bool(events), "semantic focus manifest must contain focus_events")
+        for index, event in enumerate(events if isinstance(events, list) else []):
+            label = f"semantic focus event {index + 1}"
+            require(errors, isinstance(event, dict), f"{label} must be an object")
+            if not isinstance(event, dict):
+                continue
+            for field in ("cue_id", "mark_id", "target_id", "mark_center", "target_center", "tolerance_px", "status"):
+                require(errors, event.get(field) not in (None, ""), f"{label}.{field} is required")
+            require(errors, event.get("mark_id") in object_by_id, f"{label}.mark_id is not registered")
+            require(errors, event.get("target_id") in object_by_id, f"{label}.target_id is not registered")
+            mark_center, target_center = event.get("mark_center"), event.get("target_center")
+            valid_mark = isinstance(mark_center, list) and len(mark_center) == 2 and all(isinstance(v, (int, float)) for v in mark_center)
+            valid_target = isinstance(target_center, list) and len(target_center) == 2 and all(isinstance(v, (int, float)) for v in target_center)
+            require(errors, valid_mark, f"{label}.mark_center must be [x,y]")
+            require(errors, valid_target, f"{label}.target_center must be [x,y]")
+            tolerance = event.get("tolerance_px")
+            require(errors, isinstance(tolerance, (int, float)) and 0 <= tolerance <= 8, f"{label}.tolerance_px must be between 0 and 8")
+            if valid_mark and valid_target and isinstance(tolerance, (int, float)):
+                error_px = math.dist(mark_center, target_center)
+                require(errors, error_px <= tolerance, f"{label} points at the wrong target; centre error is {error_px:.2f}px")
+            require(errors, event.get("status") == "PASS", f"{label}.status must PASS")
+
+    generation = read_linked_json(
+        errors,
+        visual.get("asset_generation_manifest_path", ""),
+        manifest,
+        "visual.asset_generation_manifest_path",
+    )
+    if generation is not None:
+        mode = generation.get("mode")
+        require(errors, mode in ASSET_GENERATION_MODES, "asset generation mode is unsupported")
+        capabilities = generation.get("runtime_capabilities")
+        require(errors, isinstance(capabilities, dict), "asset generation runtime_capabilities must be an object")
+        imagegen_available = capabilities.get("image_generation_available") if isinstance(capabilities, dict) else None
+        if mode == "builtin_imagegen":
+            require(errors, imagegen_available is True, "builtin_imagegen mode requires an available image-generation tool")
+        assets = generation.get("assets")
+        require(errors, isinstance(assets, list) and bool(assets), "asset generation manifest must contain assets")
+        for index, asset in enumerate(assets if isinstance(assets, list) else []):
+            label = f"generated asset {index + 1}"
+            for field in ("asset_id", "source_mode", "provenance", "license_status", "status"):
+                require(errors, isinstance(asset, dict) and asset.get(field) not in (None, ""), f"{label}.{field} is required")
+            if isinstance(asset, dict):
+                require(errors, asset.get("source_mode") in ASSET_GENERATION_MODES, f"{label}.source_mode is unsupported")
+                require(errors, asset.get("license_status") == "PASS", f"{label}.license_status must PASS")
+                require(errors, asset.get("status") == "READY", f"{label}.status must be READY")
+        if imagegen_available is False:
+            fallback = generation.get("no_imagegen_fallback")
+            require(errors, isinstance(fallback, dict), "runtime without image generation requires no_imagegen_fallback")
+            if isinstance(fallback, dict):
+                require(errors, fallback.get("mode") in {"user_supplied", "local_library"}, "no-imagegen fallback must use user_supplied or local_library assets")
+                require(errors, fallback.get("status") == "READY", "no-imagegen fallback must be READY")
+
+    bgm = read_linked_json(
+        errors,
+        data.get("audio", {}).get("background_music_ledger_path", ""),
+        manifest,
+        "audio.background_music_ledger_path",
+    )
+    if bgm is not None:
+        source_raw = bgm.get("source_path", "")
+        require_file(errors, source_raw, manifest, "background music source_path")
+        expected_hash = str(bgm.get("sha256", "")).lower()
+        require(errors, bool(re.fullmatch(r"[0-9a-f]{64}", expected_hash)), "background music sha256 must contain 64 hex characters")
+        if source_raw:
+            source_path = resolve_path(source_raw, manifest)
+            if source_path.is_file() and re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+                require(errors, file_sha256(source_path) == expected_hash, "background music hash does not match the declared source")
+        gain = bgm.get("render_gain")
+        require(errors, isinstance(gain, (int, float)) and 0 < gain <= 0.25, "background music render_gain must be above 0 and no more than 0.25")
+        require(errors, bgm.get("role") == "secondary", "background music role must be secondary")
+        require(errors, bgm.get("provenance_status") == "PASS", "background music provenance must PASS")
+        require(errors, bgm.get("audible_review_status") == "PASS", "background music audible review must PASS")
+        require(errors, bgm.get("speech_masking_status") == "PASS", "background music speech-masking review must PASS")
+
+    release = data.get("release", {})
+    require_file(errors, release.get("runtime_compatibility_path", ""), manifest, "release.runtime_compatibility_path")
+    if release.get("show_repository_identity") is True:
+        identity = release.get("repository_identity")
+        require(errors, isinstance(identity, dict), "repository identity must be an object when shown")
+        if isinstance(identity, dict):
+            require(errors, bool(identity.get("skill_name")), "repository identity skill_name is required")
+            require(errors, bool(re.match(r"^https://github\.com/[^/]+/[^/]+/?$", str(identity.get("repository_url", "")))), "repository identity must contain a full GitHub repository URL")
+            require(errors, identity.get("text_fidelity_status") == "PASS", "repository identity text fidelity must PASS")
+            require(errors, identity.get("foreground_protection_status") == "PASS", "repository identity foreground protection must PASS")
 
 
 def parse_timestamp(value: str) -> float:
@@ -238,7 +364,7 @@ def parse_timestamp(value: str) -> float:
     return int(hours) * 3600 + int(minutes) * 60 + int(seconds) + int(millis) / 1000
 
 
-def validate_srt(errors: list[str], path: Path, *, require_punctuation: bool = False) -> dict:
+def validate_srt(errors: list[str], path: Path, *, require_punctuation: bool = False, forbid_terminal_punctuation: bool = False) -> dict:
     try:
         text = path.read_text(encoding="utf-8-sig")
     except (OSError, UnicodeError) as exc:
@@ -276,6 +402,9 @@ def validate_srt(errors: list[str], path: Path, *, require_punctuation: bool = F
     punctuation_count = len(NATURAL_PUNCTUATION.findall(payload))
     if require_punctuation:
         require(errors, punctuation_count > 0, "TTS SRT must preserve natural punctuation")
+    if forbid_terminal_punctuation:
+        terminal = [line for line in payload_lines if TERMINAL_SCREEN_PUNCTUATION.search(line)]
+        require(errors, not terminal, f"screen captions must omit terminal punctuation; offending lines: {terminal[:3]}")
     return {"cue_count": len(cues), "punctuation_count": punctuation_count, "text": payload}
 
 
@@ -325,8 +454,9 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
     errors: list[str] = []
     schema_version = data.get("schema_version")
     require(errors, schema_version in SCHEMA_VERSIONS, "unsupported schema_version")
-    is_v11 = schema_version in {"audio-locked-episode-1.1", "audio-locked-episode-1.2"}
-    is_v12 = schema_version == "audio-locked-episode-1.2"
+    is_v11 = schema_version in {"audio-locked-episode-1.1", "audio-locked-episode-1.2", "audio-locked-episode-1.3"}
+    is_v12 = schema_version in {"audio-locked-episode-1.2", "audio-locked-episode-1.3"}
+    is_v13 = schema_version == "audio-locked-episode-1.3"
 
     project = data.get("project", {})
     require(errors, bool(project.get("title")), "project.title is required")
@@ -345,6 +475,9 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
     require(errors, visual.get("background_motion") == "locked", "background_motion must be locked")
     require(errors, visual.get("max_simultaneous_subject_groups", 99) <= 2, "max simultaneous subject groups must be <= 2")
     require(errors, visual.get("captions_and_marks_are_deterministic_post") is True, "captions and marks must be deterministic post elements")
+    if is_v12:
+        require(errors, visual.get("all_visible_text_has_foreground_protection") is True, "all visible text must have foreground protection")
+        require(errors, visual.get("isolated_assets_require_alpha_edge_margin") is True, "isolated assets must prove alpha-edge margin")
     if is_v11:
         require(errors, visual.get("role_based_character_entry") is True, "characters must use role-based entry")
         require(
@@ -382,6 +515,8 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
             require(errors, jianying.get("tts_text_integrity_status") == "PASS", "TTS text integrity must PASS")
             require(errors, jianying.get("screen_captions_follow_real_audio") is True, "screen captions must follow the returned real audio")
             require(errors, jianying.get("assets_are_separate_files") is True, "TTS and screen-caption SRTs must be separate assets")
+            if is_v12:
+                require(errors, jianying.get("screen_captions_omit_terminal_punctuation") is True, "screen captions must omit terminal punctuation")
             require_file(errors, jianying.get("tts_import_srt", ""), manifest, "jianying.tts_import_srt")
             if jianying.get("tts_import_srt"):
                 subtitle_path = resolve_path(jianying["tts_import_srt"], manifest)
@@ -419,9 +554,11 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
             if jianying.get("screen_caption_srt"):
                 screen_path = resolve_path(jianying["screen_caption_srt"], manifest)
                 if screen_path.is_file():
-                    validate_srt(errors, screen_path)
+                    validate_srt(errors, screen_path, forbid_terminal_punctuation=is_v12)
         if is_v12:
-            validate_v12_evidence(errors, data, manifest)
+            object_by_id = validate_v12_evidence(errors, data, manifest)
+            if is_v13:
+                validate_v13_evidence(errors, data, manifest, object_by_id)
 
     if stage in STAGES[3:]:
         front = data.get("gates", {}).get("front40", {})
@@ -465,6 +602,13 @@ def validate(data: dict, manifest: Path, stage: str) -> list[str]:
             require(errors, final.get("silent_readability_status") == "PASS", "final silent-readability gate must PASS")
             require(errors, final.get("output_origin_status") == "PASS", "final output-origin gate must PASS")
             require(errors, final.get("same_source_layer_status") == "PASS", "final same-source layer gate must PASS")
+        if is_v13:
+            require(errors, final.get("semantic_focus_status") == "PASS", "final semantic-focus gate must PASS")
+            require(errors, final.get("background_music_status") == "PASS", "final background-music gate must PASS")
+            require(errors, final.get("runtime_compatibility_status") == "PASS", "final runtime-compatibility gate must PASS")
+            release = data.get("release", {})
+            if release.get("show_repository_identity") is True:
+                require(errors, final.get("repository_identity_status") == "PASS", "final repository-identity gate must PASS")
         duration_for_qa = duration if isinstance(duration, (int, float)) and duration > 0 else 0
         required_frames = max(24, math.ceil(duration_for_qa / 10))
         required_crops = max(8, math.ceil(duration_for_qa / 30))

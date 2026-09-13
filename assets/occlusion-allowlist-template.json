@@ -16,5 +16,7 @@
     }
   ],
   "undeclared_overlaps": [],
-  "caption_overlaps": []
+  "caption_overlaps": [],
+  "visible_text_occlusions": [],
+  "cropped_asset_ids": []
 }

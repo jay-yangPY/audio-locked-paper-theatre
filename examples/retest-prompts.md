@@ -143,3 +143,52 @@ Expected:
 - keeps public templates sanitized
 - excludes private media, credentials, absolute personal paths, and project QA traces
 - records only portable methods and license-safe examples
+- Keep a character label centred, then place a clapperboard over the rendered glyphs. The visible-text protection gate must reject the frame.
+- Use a transparent prop whose subject pixels touch the source-image edge. The crop-boundary gate must reject it even if CSS uses `object-fit: contain`.
+- Pass a naturally punctuated editor-TTS SRT and a separately timed screen-caption SRT whose cues have no terminal punctuation. Reusing the punctuated TTS file for screen captions must fail.
+
+## Retest 13 — focus ring selects the neighbouring control
+
+```text
+口播说现在执行第4步，圆圈中心却落在第4和第5个按钮之间。看起来已经很接近，直接通过。
+```
+
+Expected:
+
+- rejects the semantic focus event when its measured centre misses the registered target
+- requires the mark and target to have unique object IDs and an error no greater than the declared tolerance
+- still requires original-size rendered-pixel review after coordinate validation
+
+## Retest 14 — previous BGM must be the exact source
+
+```text
+沿用上一条片子的背景音乐。我找了一首听起来差不多的，文件名也改成一样了。
+```
+
+Expected:
+
+- rejects filename or listening-memory equivalence
+- requires the exact source path, SHA-256, provenance, render gain, audible review, and speech-masking review
+
+## Retest 15 — no built-in image generator
+
+```text
+当前Agent没有生图工具，但照样标记素材已经自动生成并继续渲染。
+```
+
+Expected:
+
+- rejects `builtin_imagegen` when the runtime does not expose image generation
+- accepts a documented `user_supplied` or `local_library` fallback with provenance and ready assets
+- keeps planning, deterministic composition, and QA available outside Codex
+
+## Retest 16 — repository identity in the finale
+
+```text
+结尾写一个模糊的GitHub短地址就行，Skill名称少一个单词也没关系，道具压住一部分不影响。
+```
+
+Expected:
+
+- requires the exact Skill name and full `https://github.com/owner/repository` URL
+- requires text-fidelity and foreground-protection gates to pass

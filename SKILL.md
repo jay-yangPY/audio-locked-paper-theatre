@@ -1,6 +1,6 @@
 ---
 name: audio-locked-paper-theatre
-description: Plan, validate, and deliver narration-locked editorial paper-collage explainers of 60 seconds or longer, with no hard upper duration limit. Use when the final voice track must control a fixed paper-theatre timeline with independent AI assets, deterministic captions, semantic action and physical-boundary manifests, a first-40-second proof gate, duration-scaled whole-film QA, native 3:4/4:3 covers, and a release package. Do not use for a single short B-roll clip or a presenter-led advertisement.
+description: Plan, validate, and deliver narration-locked editorial paper-collage explainers of 60 seconds or longer, with no hard upper duration limit. Use when the final voice track must control a fixed paper-theatre timeline with independent visual assets, deterministic captions and semantic marks, sourced BGM, a first-40-second proof gate, duration-scaled whole-film QA, native 3:4/4:3 covers, and a release package. Works in Codex and equivalent file-and-command-capable agents; image generation is optional when lawful user-supplied or local assets are available. Do not use for a single short B-roll clip or a presenter-led advertisement.
 ---
 
 # Audio-Locked Paper Theatre
@@ -8,6 +8,7 @@ description: Plan, validate, and deliver narration-locked editorial paper-collag
 Build long-form editorial paper-collage explainers around the accepted real voice track. The voiceover is the only master timeline; music remains secondary. A fixed theatre holds the scene while independent semantic objects enter, interact, create a visible consequence, and settle.
 
 Read [references/workflow.md](references/workflow.md) completely before planning, rendering, reviewing, or accepting an episode. Read [references/sources-and-license-boundary.md](references/sources-and-license-boundary.md) before importing any outside method, demo, code, or template.
+Read [references/runtime-compatibility.md](references/runtime-compatibility.md) before selecting an asset-generation mode. When the episode uses the bright editorial identity, read [references/bright-papercraft-presentation.md](references/bright-papercraft-presentation.md).
 
 ## Boundaries
 
@@ -23,6 +24,7 @@ Do not copy protected templates, fonts, visual systems, private media, credentia
 - Keep one complete meaning in one theatre. Aim for a real visible semantic change every 3–7 seconds and a new knowledge state every 20–30 seconds.
 - Use deterministic post-production for exact captions, labels, numerals, arrows, circles, masks, z-order, and motion paths.
 - Bind every semantic mark to a measured `target_id` and target bounds. Inspect all marks, not only examples the user notices.
+- Register every circle, arrow, underline, spotlight, or magnifier in `semantic-focus.json`. Its measured centre must resolve to the intended target within the declared tolerance and pass original-size pixel review.
 - Register each spoken unit as `actor_id -> target_id -> action -> visible_result -> closing_state`, plus the exact forbidden misread. For scan, inspect, crop, and screenshot actions, the target must be the real primary subject.
 - Require physical machines to declare hard masks and output ports. A scan beam stays inside the intersection of the visible subject and mask on every sample; a receipt or result must visibly emerge from its registered producer port.
 - A three-layer explanation must decompose one registered source into three or more layers that share the same `source_id`. Three adjacent icons are not a decomposition.
@@ -34,6 +36,9 @@ Do not copy protected templates, fonts, visual systems, private media, credentia
 - There is no 240-second ceiling. After proof approval, finish the complete requested episode; use 45–60 second chapters only as internal construction units, not as repeated user approval gates. Scale asset counts, original-size review frames, and dense crops with total duration.
 - Generate 3:4 and 4:3 covers as independent AI-native compositions. Verify exact text, optical centring, phone-size readability, platform UI overlap, anatomy, and focal-point occlusion.
 - Keep `OWNER_PREVIEW_ALLOWED`, `PUBLISHED`, and `MARKET_VALIDATED` as separate states.
+- Record the exact BGM source and SHA-256 in `background-music.json`. If the owner asks for a previous track, verify exact hash equality before rendering.
+- Select one asset mode in `asset-generation.json`. Use `builtin_imagegen` only when the current runtime actually exposes image generation; otherwise use `user_supplied` or `local_library` and record provenance.
+- When a finished video shows a Skill name or repository URL, render the exact strings deterministically, protect them from foreground objects, and validate the full `https://github.com/owner/repository` URL.
 
 ## Workflow
 
@@ -53,7 +58,7 @@ draft
 → final package
 ```
 
-Copy [assets/episode-template.json](assets/episode-template.json) into the project as `episode.json`. Copy the semantic action, object registry, occlusion, silent-review, and motion-ledger templates from `assets/`, then replace the example values with measured episode evidence. Validate after every state change:
+Copy [assets/episode-template.json](assets/episode-template.json) into the project as `episode.json`. Copy the semantic action, object registry, occlusion, silent-review, motion-ledger, semantic-focus, asset-generation, and background-music templates from `assets/`, then replace the example values with measured episode evidence. Validate after every state change:
 
 ```bash
 python scripts/validate_episode.py /absolute/path/to/episode.json --stage plan

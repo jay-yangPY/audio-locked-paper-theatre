@@ -1,0 +1,20 @@
+{
+  "schema_version": "semantic-focus-1.0",
+  "focus_events": [
+    {
+      "cue_id": "cue-001",
+      "mark_id": "focus_ring",
+      "target_id": "hero_image",
+      "mark_center": [
+        650,
+        390
+      ],
+      "target_center": [
+        650,
+        390
+      ],
+      "tolerance_px": 8,
+      "status": "PASS"
+    }
+  ]
+}

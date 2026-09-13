@@ -1,0 +1,11 @@
+{
+  "schema_version": "background-music-ledger-1.0",
+  "source_path": "",
+  "sha256": "",
+  "role": "secondary",
+  "render_gain": 0.05,
+  "provenance": "user-provided or licensed local track",
+  "provenance_status": "pending",
+  "audible_review_status": "pending",
+  "speech_masking_status": "pending"
+}

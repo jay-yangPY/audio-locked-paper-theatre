@@ -1,5 +1,5 @@
 {
-  "schema_version": "audio-locked-episode-1.2",
+  "schema_version": "audio-locked-episode-1.3",
   "project": {
     "title": "",
     "orientation": "horizontal",
@@ -26,6 +26,7 @@
     "tts_preserves_natural_punctuation": true,
     "tts_text_integrity_status": "pending",
     "screen_captions_follow_real_audio": true,
+    "screen_captions_omit_terminal_punctuation": true,
     "assets_are_separate_files": true,
     "untimed_txt_is_formal_asset": false
   },
@@ -39,7 +40,8 @@
     "channels": null,
     "bgm_path": "",
     "bgm_role": "secondary",
-    "clean_master_path": ""
+    "clean_master_path": "",
+    "background_music_ledger_path": ""
   },
   "visual": {
     "production_profile": "audio-locked-paper-theatre-longform",
@@ -51,14 +53,21 @@
     "occlusion_allowlist_path": "",
     "silent_review_path": "",
     "motion_recipe_ledger_path": "",
-    "target_distinct_assets_per_minute": [12, 18],
+    "target_distinct_assets_per_minute": [
+      12,
+      18
+    ],
     "max_simultaneous_subject_groups": 2,
     "captions_and_marks_are_deterministic_post": true,
     "role_based_character_entry": true,
     "full_frame_padding_policy": "forbid-mirror-reflect-tile-loop-stretch",
     "viewport_inside_valid_source_pixels": true,
     "all_visible_container_children_register_center_in_parent": true,
-    "geometry_and_optical_center_required": true
+    "geometry_and_optical_center_required": true,
+    "all_visible_text_has_foreground_protection": true,
+    "isolated_assets_require_alpha_edge_margin": true,
+    "semantic_focus_manifest_path": "",
+    "asset_generation_manifest_path": ""
   },
   "gates": {
     "front40": {
@@ -102,7 +111,11 @@
       "original_size_frame_count": null,
       "dense_crop_count": null,
       "full_decode_status": "pending",
-      "steward_status": "pending"
+      "steward_status": "pending",
+      "semantic_focus_status": "pending",
+      "background_music_status": "pending",
+      "runtime_compatibility_status": "pending",
+      "repository_identity_status": "not_applicable"
     }
   },
   "brand_tail": {
@@ -110,7 +123,10 @@
     "source_path": "",
     "status": "pending",
     "duration_seconds": null,
-    "target_duration_range_seconds": [3.5, 4.5],
+    "target_duration_range_seconds": [
+      3.5,
+      4.5
+    ],
     "identity_is_stable": true,
     "topic_playful_action": ""
   },
@@ -131,5 +147,15 @@
     "sha256_ledger_path": "",
     "published": false,
     "market_validated": false
+  },
+  "release": {
+    "runtime_compatibility_path": "",
+    "show_repository_identity": false,
+    "repository_identity": {
+      "skill_name": "",
+      "repository_url": "",
+      "text_fidelity_status": "not_applicable",
+      "foreground_protection_status": "not_applicable"
+    }
   }
 }

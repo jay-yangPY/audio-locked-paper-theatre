@@ -1,0 +1,26 @@
+{
+  "schema_version": "asset-generation-1.0",
+  "mode": "builtin_imagegen",
+  "runtime_capabilities": {
+    "file_io": true,
+    "shell": true,
+    "python": true,
+    "node": true,
+    "ffmpeg": true,
+    "image_generation_available": true
+  },
+  "assets": [
+    {
+      "asset_id": "paper-hero-001",
+      "source_mode": "builtin_imagegen",
+      "provenance": "generated for this episode from an original prompt",
+      "license_status": "PASS",
+      "status": "READY"
+    }
+  ],
+  "no_imagegen_fallback": {
+    "mode": "user_supplied",
+    "status": "READY",
+    "instruction": "Collect user-supplied or approved local assets, record provenance, then resume composition and QA."
+  }
+}
